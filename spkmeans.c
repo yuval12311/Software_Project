@@ -119,6 +119,92 @@ void inv_sqrt(double** d, int n) {
 }
 
 
+double off(double** a, int n) {
+    int i, j;
+    double sum = 0;
+
+    for (i = 0; i < n; ++i) {
+        for (j = 0; j < n; ++j) {
+            if (i != j) sum += a[i][j]*a[i][j];
+        }
+    }
+    return sum;
+}
+
+
+int largest_off_diag(double** a, int n) {
+    int i,j,imax=0,jmax=1;
+    for (i = 0; i < n; ++i) {
+        for( j = i + 1; j < n; ++j) {
+            if (a[i][j] > a[imax][jmax]) {
+                imax = i;
+                jmax = j;
+            }
+        }
+    }
+
+    return i * n + j;
+
+}
+
+int sign(double x) {
+    return x >= 0 ? 1 : 0;
+}
+
+double compute_t(int i, int j, double** a) {
+    double theta = (a[j][j] - a[i][i])/(2*a[i][j]);
+    return sign(theta) / (abs(theta) + sqrt(theta * theta + 1));
+}
+double compute_c(double t) {
+    return 1/sqrt(t*t+1);
+}
+
+
+double** build_rot(int i, int j, double s, double c, int n) {
+    double** p;
+    int k;
+    double s, c, t;
+    
+    
+    p = new_matrix(n);
+    for (k = 0; k < n; ++k) {p[k][k] = 1;}
+    p[i][i] = c;
+    p[j][j] = c;
+    p[i][j] = s;
+    p[j][i] = -s;
+}
+
+double update_a(int i, int j, double s, double c, double** a, int n) {
+    int r;
+    double off, temp1, temp2;
+
+    for(int r = 0; r < n; ++r) {
+        if (r != i && r != j) {
+            off += 2 * (c*a[r][i]-s*a[r][j])* (c*a[r][i]-s*a[r][j]) - 2 * a[r][i] * a[r][i];
+            off += 2 * (c*a[r][j]+s*a[r][i])* (c*a[r][j]+s*a[r][i]) - 2 * a[r][j] * a[r][j]; /* maybe wrong */
+            temp1 = a[r][i];
+            temp2 = a[r][j];
+            a[r][i] = a[i][r] = c*temp1-s*temp2;
+            a[r][j] = a[i][j] = c*temp2 + s*temp1;
+        }
+    }
+    a[i][i] = c*c*a[i][i] + s*s*a[j][j] - 2*s*c*a[i][j];
+    a[j][j] = s*s*a[i][i] + c*c*a[j][j] + 2*s*c*a[i][j];
+    a[i][j] = a[j][i] = 0;
+    return off;
+}
+
+double* diag(double** a, int n) {
+    double* diag;
+    int i;
+    diag = malloc(n*sizeof(double));
+    if (diag == NULL) error();
+    for (i = 0; i < n; ++i) {
+        diag[i] = a[i][i];
+    }
+    return diag;
+}
+
 double** wam(vector* vectors, int n) {
     double** w;
     int i,j;
@@ -171,10 +257,56 @@ double** lnorm(vector* vectors, int n) {
     free_matrix(w);
 
     for (i = 0; i < n; ++i) {
-        l[i][i] = 1 - l[i][i];
+        for (j = 0; j < n; ++j) {
+            l[i][j] = - l[i][j];
+        }
+        l[i][i] += 1;
     }
     
     return l;
+}
+
+
+double** jacobi(vector* vectors, int n) {
+    double **v, **p, **a, **temp, **ret;
+    int imax, jmax, iterations = 0, l;
+    double eps = 1.0e-15, c, s, t, off;
+    double* eigenvals;
+
+
+    a = lnorm(vectors, n);
+    v = build_rot(0, 1, 0, 1, n);
+    do {
+        l = largest_off_diag(a, n)/n;
+        jmax = l%n; imax = l/n;
+
+        t = compute_t(imax, jmax, a);
+        c = compute_c(t);
+        s = t * c;
+        p = build_rot(imax, jmax, s, c, n);
+
+        temp = v;
+        v = mult(v, p, n);
+        free_matrix(temp);
+        free_matrix(p);
+
+        off = update_a(imax, jmax, s, c, a, n);
+
+        
+        iterations++;
+    } while(abs(off) > eps && iterations <= 100 );
+
+    eigenvals = diag(a, n);
+    free_matrix(a);
+    ret = malloc((n+1)*sizeof(double*));
+    ret[0] = eigenvals;
+    for (l = 0; l<n ;++l) {
+        ret[1 + l] = v[l];
+    }
+    free(v);
+    return ret;
+
+
 }
 
 
