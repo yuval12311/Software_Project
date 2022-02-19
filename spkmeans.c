@@ -47,14 +47,19 @@ void printVectors(vector* vs, int k) {
     }
 }
 
+void print_arr(double* a, int n) {
+    int j;
+    for (j = 0; j < n; ++j) {
+            printf("%.4f", a[j]);
+            printf(j < n -1 ? ", " : "\n");
+    }
+}
+
 void print_matrix(double** a, int n) {
-    int i, j;
+    int i;
 
     for (i = 0; i < n; ++i) {
-        for (j = 0; j < n; ++j) {
-            printf("%.4f", a[i][j]);
-            printf(j < n -1 ? ", " : "\n");
-        }
+        print_arr(a[i], n);
     }
     
 }
@@ -99,6 +104,14 @@ double** mult(double** a, double** b, int n) {
         }
     }
     return c;
+}
+
+int in(char* str, char* strs[], int size) {
+    int i;
+    for (i = 0; i < size; ++i) {
+        if (strcmp(str, strs[i]) == 0) return i;
+    }
+    return size;
 }
 /* squared euclidean distance between vectors */
 double sqr_dist(vector* v1, vector* v2) {
@@ -268,13 +281,17 @@ double** lnorm(vector* vectors, int n) {
     return l;
 }
 
+typedef struct {
+    double** vecs;
+    double* vals;
+} eigen;
 
-double** jacobi(vector* vectors, int n) {
-    double **v, **p, **a, **temp, **ret;
+eigen jacobi(vector* vectors, int n) {
+    double **v, **p, **a, **temp;
     int imax, jmax, iterations = 0, l;
     double eps = 1.0e-15, c, s, t, off;
     double* eigenvals;
-
+    eigen ret;
 
     a = lnorm(vectors, n);
     v = build_rot(0, 1, 0, 1, n);
@@ -295,15 +312,11 @@ double** jacobi(vector* vectors, int n) {
     } while(fabs(off) > eps && iterations <= 100 );
 
     eigenvals = diag(a, n);
-    ret = malloc((n+1)*sizeof(double*));
-    ret[0] = eigenvals;
-    for (l = 0; l<n ;++l) {
-        ret[1 + l] = v[l];
-    }
-    free(v);
+    free_matrix(a);
+
+    ret.vecs = v;
+    ret.vals = eigenvals;
     return ret;
-
-
 }
 
 int countLines(char* fname) {
@@ -358,8 +371,43 @@ vector* read(char* fname, int n) {
     return vectors;
 }
 
-int main() {
-
+int main(int argc, char* argv[]) {
+    char* file;
+    double** matrix;
+    int type, n;
+    vector* vectors;
+    char* functions[] = {"wam", "ddg", "lnorm", "jacobi"};
+    eigen ret;
+    if (argc != 3) input_error();
+    file = argv[2];
+    type = in(argv[1], functions, 4);
+    if (type > 3) input_error();
+    n = countLines(file);
+    vectors = read(file, n);
+    switch (type)
+    {
+    case 0:
+        matrix = wam(vectors, n);
+        break;
+    case 1:
+        matrix = ddg(vectors, n);
+        break;
+    case 2: 
+        matrix = lnorm(vectors, n);
+        break;
+    case 3:
+        ret = jacobi(vectors, n);
+        matrix = ret.vecs;
+        print_arr(ret.vals, n);
+        free(ret.vals);
+    default:
+        break;
+    }
+    print_matrix(matrix, n);
+    free_matrix(matrix);
+    freeVectors(vectors, n);
+    /* double** p = build_rot(0, 1, 0, 1, 5);
+    free_matrix(p); */
     return 0;
 
 
