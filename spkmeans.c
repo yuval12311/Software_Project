@@ -3,55 +3,29 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
+#include "vector.h"
 typedef struct {
-    int size;
-    double* data;
-} vector;
+    double** vecs;
+    double* vals;
+} eigen;
 
-void error() {
-    printf("An Error Has Occurred\n");
-    exit(1);
-}
 
-void input_error() {
-    printf("Invalid Input!\n");
-    exit(1);
-}
 
-void freeVector(vector* v) {
-    free(v->data);
-    free(v);
-}
 
-void freeVectors(vector* vectors, int k) {
-    int i;
-    for (i=0; i<k; ++i) {
-        free(vectors[i].data);
-    }
-    free(vectors);
-}
-
-void printVector(vector* v) {
-    int i;
-    for (i=0; i<v->size; ++i) {
-        printf("%f", v->data[i]);
-        printf(i<v->size -1 ? ",\t" : "\n");
+void print_arr_jacobi(double* a, int n) {
+    int j;
+    for (j = 0; j < n; ++j) {
+            if (fabs(a[j]) >= 0.00005) printf("%.4f", a[j]);
+            else printf("0.0000");
+            printf(j < n -1 ? "," : "\n");
     }
 }
-
-void printVectors(vector* vs, int k) {
-    int i;
-    for (i=0; i<k; ++i) {
-        printVector(vs+i);
-    }
-}
-
 void print_arr(double* a, int n) {
     int j;
     for (j = 0; j < n; ++j) {
             printf("%.4f", a[j]);
-            printf(j < n -1 ? ", " : "\n");
+            
+            printf(j < n -1 ? "," : "\n");
     }
 }
 
@@ -60,6 +34,15 @@ void print_matrix(double** a, int n) {
 
     for (i = 0; i < n; ++i) {
         print_arr(a[i], n);
+    }
+    
+}
+
+void print_matrix_jacobi(double** a, int n) {
+    int i;
+
+    for (i = 0; i < n; ++i) {
+        print_arr_jacobi(a[i], n);
     }
     
 }
@@ -89,8 +72,21 @@ void free_matrix(double** a) {
     free(a);
 }
 
+double** vectors_to_matrix(vector* vectors, int n) {
+    double** matrix;
+    int i,j;    
+    matrix = new_matrix(n);
+    for (i = 0; i < n; ++i) {
+        for (j = i; j < n; ++j) {
+            if (vectors[i].data[j] != vectors[j].data[i]) input_error();
+            matrix[i][j] = matrix[j][i] = vectors[i].data[j];
+        }
+    }
+    return matrix;
+}
+
 /* Multiplies to n*n matrices */
-double** mult(double** a, double** b, int n) {
+double** mat_mult(double** a, double** b, int n) {
     double** c;
     int i, j, k;
 
@@ -113,15 +109,7 @@ int in(char* str, char* strs[], int size) {
     }
     return size;
 }
-/* squared euclidean distance between vectors */
-double sqr_dist(vector* v1, vector* v2) {
-    double dist = 0;
-    int i = 0;
-    for (i = 0; i < v1->size; ++i) {
-        dist += (v1->data[i] - v2->data[i])*(v1->data[i] - v2->data[i]);
-    }
-    return dist;
-}
+
 
 /* inverse square root of a diagonal matrix, inplace */
 void inv_sqrt(double** d, int n) {
@@ -204,9 +192,19 @@ double update_a(int i, int j, double s, double c, double** a, int n) {
     temp1 = a[i][i]; temp2 = a[j][j];
     a[i][i] = c*c*temp1 + s*s*temp2 - 2*s*c*a[i][j];
     a[j][j] = s*s*temp1 + c*c*temp2 + 2*s*c*a[i][j];
-    off = -a[i][i]*a[i][i] - a[j][j]*a[j][j]; /* the difference in off^2 is just these two elements, since the sum of all elements squared is perserved under the rotation */
+    off =temp1*temp1 -a[i][i]*a[i][i] + temp2*temp2 - a[j][j]*a[j][j]; /* the difference in off^2 is just these two elements, since the sum of all elements squared is perserved under the rotation */
     a[i][j] = a[j][i] = 0;
-    return off;
+    return  off;
+}
+
+void update_v(int i, int j, double s, double c, double** v, int n) {
+    int r;
+    double temp1, temp2;
+    for(r = 0; r < n; ++r) {
+        temp1 = v[r][i]; temp2 = v[r][j];
+        v[r][i] = temp1 * c - temp2 * s;
+        v[r][j] = temp1 * s + temp2 * c;
+    }
 }
 
 double* diag(double** a, int n) {
@@ -220,7 +218,7 @@ double* diag(double** a, int n) {
     return diag;
 }
 
-double** wam(vector* vectors, int n) {
+double** wam_c(vector* vectors, int n) {
     double** w;
     int i,j;
 
@@ -248,25 +246,25 @@ double** ddg_from_w(double** w, int n) {
     return d;
 }
 
-double** ddg(vector* vectors, int n) {
+double** ddg_c(vector* vectors, int n) {
     double **w, **d;
-    w = wam(vectors, n);
+    w = wam_c(vectors, n);
     d = ddg_from_w(w, n);
     free_matrix(w);
     return d;
 }
 
-double** lnorm(vector* vectors, int n) {
+double** lnorm_c(vector* vectors, int n) {
     double **w, **d, **l , **temp;
     int i,j;
 
-    w = wam(vectors, n);
+    w = wam_c(vectors, n);
     d = ddg_from_w(w, n);
     inv_sqrt(d, n);
 
-    l = mult(d, w, n);
+    l = mat_mult(d, w, n);
     temp = l;
-    l = mult(l, d, n);
+    l = mat_mult(l, d, n);
     free_matrix(temp);
     free_matrix(d);
     free_matrix(w);
@@ -281,37 +279,40 @@ double** lnorm(vector* vectors, int n) {
     return l;
 }
 
-typedef struct {
-    double** vecs;
-    double* vals;
-} eigen;
 
-eigen jacobi(vector* vectors, int n) {
-    double **v, **p, **a, **temp;
-    int imax, jmax, iterations = 0, l;
-    double eps = 1.0e-15, c, s, t, off;
+eigen jacobi_c(double** a, int n) {
+    double **v;
+    int imax, jmax, iterations = 1, l;
+    double eps = 1.0e-5, c, s, t, off=0;
     double* eigenvals;
     eigen ret;
 
-    a = lnorm(vectors, n);
+    
     v = build_rot(0, 1, 0, 1, n);
-    do {
+     do {
         l = largest_off_diag(a, n);
         jmax = l%n; imax = l/n;
+        if (a[imax][jmax] == 0) break;
         t = compute_t(imax, jmax, a);
         c = compute_c(t);
         s = t * c;
-        p = build_rot(imax, jmax, s, c, n);
+        /* p = build_rot(imax, jmax, s, c, n);
 
         temp = v;
-        v = mult(v, p, n);
+        v = mat_mult(v, p, n);
         free_matrix(p);
-        free_matrix(temp);
+        free_matrix(temp); */
+        update_v(imax, jmax, s, c, v, n);
         off = update_a(imax, jmax, s, c, a, n);
+        /* print_matrix(v, n);
+        printf("\n");
+        print_matrix(a, n);
+        printf("\n%d, %17g\n\n", iterations, -off); */
         iterations++;
-    } while(fabs(off) > eps && iterations <= 100 );
+    }while(-off > eps && iterations <= 100 );
 
     eigenvals = diag(a, n);
+    
     free_matrix(a);
 
     ret.vecs = v;
@@ -373,11 +374,12 @@ vector* read(char* fname, int n) {
 
 int main(int argc, char* argv[]) {
     char* file;
-    double** matrix;
+    double** matrix,** matrix2;
     int type, n;
     vector* vectors;
     char* functions[] = {"wam", "ddg", "lnorm", "jacobi"};
     eigen ret;
+    
     if (argc != 3) input_error();
     file = argv[2];
     type = in(argv[1], functions, 4);
@@ -387,25 +389,34 @@ int main(int argc, char* argv[]) {
     switch (type)
     {
     case 0:
-        matrix = wam(vectors, n);
+        matrix = wam_c(vectors, n);
         break;
     case 1:
-        matrix = ddg(vectors, n);
+        matrix = ddg_c(vectors, n);
         break;
     case 2: 
-        matrix = lnorm(vectors, n);
+        matrix = lnorm_c(vectors, n);
         break;
     case 3:
-        ret = jacobi(vectors, n);
+        if (vectors->size != n) input_error();
+        matrix2 = vectors_to_matrix(vectors, n);
+        ret = jacobi_c(matrix2, n);
         matrix = ret.vecs;
+        
         print_arr(ret.vals, n);
         free(ret.vals);
+        
+        break;
     default:
+        matrix = new_matrix(1);
         break;
     }
-    print_matrix(matrix, n);
+    if (type!=3) print_matrix(matrix, n);
+    else print_matrix_jacobi(matrix, n);
+    
     free_matrix(matrix);
     freeVectors(vectors, n);
+    
     /* double** p = build_rot(0, 1, 0, 1, 5);
     free_matrix(p); */
     return 0;
